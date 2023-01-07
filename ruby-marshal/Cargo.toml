@@ -1,0 +1,15 @@
+[package]
+name = "ruby-marshal"
+description = "Deserialization library for Ruby's marshalling format"
+repository = "https://github.com/Nnubes256/ruby-marshal"
+readme = "../README.md"
+license = "MIT OR BSD-2-Clause"
+categories = ["encoding"]
+keywords = ["deserialization", "ruby", "marshal"]
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ruby-marshal-derive = { path = "../ruby-marshal-derive" }
+encoding_rs = "0.8.31"
+thiserror = "1.0.38"

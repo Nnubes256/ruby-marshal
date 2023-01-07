@@ -1,0 +1,196 @@
+Array(
+    [
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        2,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        2,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        2,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        3,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        3,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        3,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        2,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        3,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        2,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+    ],
+)

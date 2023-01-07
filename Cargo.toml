@@ -1,0 +1,3 @@
+[workspace]
+
+members = ["xtask", "ruby-marshal", "ruby-marshal-derive"]

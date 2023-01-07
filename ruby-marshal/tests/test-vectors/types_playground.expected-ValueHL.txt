@@ -1,0 +1,134 @@
+[
+    nil,
+    true,
+    false,
+    42,
+    3.141592653589793,
+    [
+        1,
+        2,
+        3,
+    ],
+    {
+        :a: 1,
+        :b: 2,
+        :c: 3,
+    },
+    :hello,
+    "hello",
+    /foobar/i,
+    ClassRef(
+        "Math::DomainError",
+    ),
+    ModuleRef(
+        "Enumerable",
+    ),
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+    InstanceVariable(
+        InstanceVariable {
+            data: UserDef(
+                UserDef {
+                    class_name: "MyObj",
+                    data: [ ... 16 bytes],
+                },
+            ),
+            ivars: {
+                :E: true,
+            },
+        },
+    ),
+    "0",
+    nil,
+    true,
+    false,
+    42,
+    3.141592653589793,
+    [
+        1,
+        2,
+        3,
+    ],
+    {
+        :a: 1,
+        :b: 2,
+        :c: 3,
+    },
+    :hello,
+    "hello",
+    /foobar/i,
+    ClassRef(
+        "Math::DomainError",
+    ),
+    ModuleRef(
+        "Enumerable",
+    ),
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+    InstanceVariable(
+        InstanceVariable {
+            data: UserDef(
+                UserDef {
+                    class_name: "MyObj",
+                    data: [ ... 16 bytes],
+                },
+            ),
+            ivars: {
+                :E: true,
+            },
+        },
+    ),
+    "0",
+    nil,
+    true,
+    false,
+    42,
+    3.141592653589793,
+    [
+        1,
+        2,
+        3,
+    ],
+    {
+        :a: 1,
+        :b: 2,
+        :c: 3,
+    },
+    :hello,
+    "hello",
+    /foobar/i,
+    ClassRef(
+        "Math::DomainError",
+    ),
+    ModuleRef(
+        "Enumerable",
+    ),
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+    InstanceVariable(
+        InstanceVariable {
+            data: UserDef(
+                UserDef {
+                    class_name: "MyObj",
+                    data: [ ... 16 bytes],
+                },
+            ),
+            ivars: {
+                :E: true,
+            },
+        },
+    ),
+    "0",
+]

@@ -1,0 +1,433 @@
+Array(
+    [
+        Null,
+        Boolean(
+            true,
+        ),
+        Boolean(
+            false,
+        ),
+        Integer(
+            42,
+        ),
+        Float(
+            3.141592653589793,
+        ),
+        Array(
+            [
+                Integer(
+                    1,
+                ),
+                Integer(
+                    2,
+                ),
+                Integer(
+                    3,
+                ),
+            ],
+        ),
+        Hash(
+            [
+                (
+                    Symbol(
+                        "a",
+                    ),
+                    Integer(
+                        1,
+                    ),
+                ),
+                (
+                    Symbol(
+                        "b",
+                    ),
+                    Integer(
+                        2,
+                    ),
+                ),
+                (
+                    Symbol(
+                        "c",
+                    ),
+                    Integer(
+                        3,
+                    ),
+                ),
+            ],
+        ),
+        Symbol(
+            "hello",
+        ),
+        InstanceVariable(
+            InstanceVariable {
+                data: ByteArray(
+                    [
+                        104,
+                        101,
+                        108,
+                        108,
+                        111,
+                    ],
+                ),
+                ivars: {
+                    Symbol(
+                        "E",
+                    ): Boolean(
+                        true,
+                    ),
+                },
+            },
+        ),
+        InstanceVariable(
+            InstanceVariable {
+                data: RawRegexp(
+                    RubyRegExpLL {
+                        data: [
+                            102,
+                            111,
+                            111,
+                            98,
+                            97,
+                            114,
+                        ],
+                        flags: 1,
+                    },
+                ),
+                ivars: {
+                    Symbol(
+                        "E",
+                    ): Boolean(
+                        false,
+                    ),
+                },
+            },
+        ),
+        ClassRef(
+            "Math::DomainError",
+        ),
+        ModuleRef(
+            "Enumerable",
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+        InstanceVariable(
+            InstanceVariable {
+                data: UserDef(
+                    UserDef {
+                        class_name: "MyObj",
+                        data: [ ... 16 bytes],
+                    },
+                ),
+                ivars: {
+                    Symbol(
+                        "E",
+                    ): Boolean(
+                        true,
+                    ),
+                },
+            },
+        ),
+        ByteArray(
+            [
+                4,
+                8,
+                48,
+            ],
+        ),
+        Null,
+        Boolean(
+            true,
+        ),
+        Boolean(
+            false,
+        ),
+        Integer(
+            42,
+        ),
+        Float(
+            3.141592653589793,
+        ),
+        Array(
+            [
+                Integer(
+                    1,
+                ),
+                Integer(
+                    2,
+                ),
+                Integer(
+                    3,
+                ),
+            ],
+        ),
+        Hash(
+            [
+                (
+                    Symbol(
+                        "a",
+                    ),
+                    Integer(
+                        1,
+                    ),
+                ),
+                (
+                    Symbol(
+                        "b",
+                    ),
+                    Integer(
+                        2,
+                    ),
+                ),
+                (
+                    Symbol(
+                        "c",
+                    ),
+                    Integer(
+                        3,
+                    ),
+                ),
+            ],
+        ),
+        Symbol(
+            "hello",
+        ),
+        InstanceVariable(
+            InstanceVariable {
+                data: ByteArray(
+                    [
+                        104,
+                        101,
+                        108,
+                        108,
+                        111,
+                    ],
+                ),
+                ivars: {
+                    Symbol(
+                        "E",
+                    ): Boolean(
+                        true,
+                    ),
+                },
+            },
+        ),
+        InstanceVariable(
+            InstanceVariable {
+                data: RawRegexp(
+                    RubyRegExpLL {
+                        data: [
+                            102,
+                            111,
+                            111,
+                            98,
+                            97,
+                            114,
+                        ],
+                        flags: 1,
+                    },
+                ),
+                ivars: {
+                    Symbol(
+                        "E",
+                    ): Boolean(
+                        false,
+                    ),
+                },
+            },
+        ),
+        ClassRef(
+            "Math::DomainError",
+        ),
+        ModuleRef(
+            "Enumerable",
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+        InstanceVariable(
+            InstanceVariable {
+                data: UserDef(
+                    UserDef {
+                        class_name: "MyObj",
+                        data: [ ... 16 bytes],
+                    },
+                ),
+                ivars: {
+                    Symbol(
+                        "E",
+                    ): Boolean(
+                        true,
+                    ),
+                },
+            },
+        ),
+        ByteArray(
+            [
+                4,
+                8,
+                48,
+            ],
+        ),
+        Null,
+        Boolean(
+            true,
+        ),
+        Boolean(
+            false,
+        ),
+        Integer(
+            42,
+        ),
+        Float(
+            3.141592653589793,
+        ),
+        Array(
+            [
+                Integer(
+                    1,
+                ),
+                Integer(
+                    2,
+                ),
+                Integer(
+                    3,
+                ),
+            ],
+        ),
+        Hash(
+            [
+                (
+                    Symbol(
+                        "a",
+                    ),
+                    Integer(
+                        1,
+                    ),
+                ),
+                (
+                    Symbol(
+                        "b",
+                    ),
+                    Integer(
+                        2,
+                    ),
+                ),
+                (
+                    Symbol(
+                        "c",
+                    ),
+                    Integer(
+                        3,
+                    ),
+                ),
+            ],
+        ),
+        Symbol(
+            "hello",
+        ),
+        InstanceVariable(
+            InstanceVariable {
+                data: ByteArray(
+                    [
+                        104,
+                        101,
+                        108,
+                        108,
+                        111,
+                    ],
+                ),
+                ivars: {
+                    Symbol(
+                        "E",
+                    ): Boolean(
+                        true,
+                    ),
+                },
+            },
+        ),
+        InstanceVariable(
+            InstanceVariable {
+                data: RawRegexp(
+                    RubyRegExpLL {
+                        data: [
+                            102,
+                            111,
+                            111,
+                            98,
+                            97,
+                            114,
+                        ],
+                        flags: 1,
+                    },
+                ),
+                ivars: {
+                    Symbol(
+                        "E",
+                    ): Boolean(
+                        false,
+                    ),
+                },
+            },
+        ),
+        ClassRef(
+            "Math::DomainError",
+        ),
+        ModuleRef(
+            "Enumerable",
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Integer(
+                        1,
+                    ),
+                },
+            },
+        ),
+        InstanceVariable(
+            InstanceVariable {
+                data: UserDef(
+                    UserDef {
+                        class_name: "MyObj",
+                        data: [ ... 16 bytes],
+                    },
+                ),
+                ivars: {
+                    Symbol(
+                        "E",
+                    ): Boolean(
+                        true,
+                    ),
+                },
+            },
+        ),
+        ByteArray(
+            [
+                4,
+                8,
+                48,
+            ],
+        ),
+    ],
+)

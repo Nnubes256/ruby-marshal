@@ -1,0 +1,98 @@
+[
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 2,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 2,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 2,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 3,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 3,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 3,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 2,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 3,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 2,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: 1,
+        },
+    },
+]

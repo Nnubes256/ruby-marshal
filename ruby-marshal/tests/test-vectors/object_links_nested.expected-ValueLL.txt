@@ -1,0 +1,220 @@
+Array(
+    [
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Object(
+                        RubyObject {
+                            class_name: "DumpTest",
+                            ivars: {
+                                Symbol(
+                                    "@a",
+                                ): Object(
+                                    RubyObject {
+                                        class_name: "DumpTest",
+                                        ivars: {
+                                            Symbol(
+                                                "@a",
+                                            ): Null,
+                                            Symbol(
+                                                "@id",
+                                            ): Integer(
+                                                1,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                Symbol(
+                                    "@id",
+                                ): Integer(
+                                    2,
+                                ),
+                            },
+                        },
+                    ),
+                    Symbol(
+                        "@id",
+                    ): Integer(
+                        3,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Object(
+                        RubyObject {
+                            class_name: "DumpTest",
+                            ivars: {
+                                Symbol(
+                                    "@a",
+                                ): Object(
+                                    RubyObject {
+                                        class_name: "DumpTest",
+                                        ivars: {
+                                            Symbol(
+                                                "@a",
+                                            ): Null,
+                                            Symbol(
+                                                "@id",
+                                            ): Integer(
+                                                1,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                Symbol(
+                                    "@id",
+                                ): Integer(
+                                    2,
+                                ),
+                            },
+                        },
+                    ),
+                    Symbol(
+                        "@id",
+                    ): Integer(
+                        3,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Null,
+                    Symbol(
+                        "@id",
+                    ): Integer(
+                        -1,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Object(
+                        RubyObject {
+                            class_name: "DumpTest",
+                            ivars: {
+                                Symbol(
+                                    "@a",
+                                ): Null,
+                                Symbol(
+                                    "@id",
+                                ): Integer(
+                                    -1,
+                                ),
+                            },
+                        },
+                    ),
+                    Symbol(
+                        "@id",
+                    ): Integer(
+                        -2,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Object(
+                        RubyObject {
+                            class_name: "DumpTest",
+                            ivars: {
+                                Symbol(
+                                    "@a",
+                                ): Object(
+                                    RubyObject {
+                                        class_name: "DumpTest",
+                                        ivars: {
+                                            Symbol(
+                                                "@a",
+                                            ): Null,
+                                            Symbol(
+                                                "@id",
+                                            ): Integer(
+                                                -1,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                Symbol(
+                                    "@id",
+                                ): Integer(
+                                    -2,
+                                ),
+                            },
+                        },
+                    ),
+                    Symbol(
+                        "@id",
+                    ): Integer(
+                        -3,
+                    ),
+                },
+            },
+        ),
+        Object(
+            RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    Symbol(
+                        "@a",
+                    ): Object(
+                        RubyObject {
+                            class_name: "DumpTest",
+                            ivars: {
+                                Symbol(
+                                    "@a",
+                                ): Object(
+                                    RubyObject {
+                                        class_name: "DumpTest",
+                                        ivars: {
+                                            Symbol(
+                                                "@a",
+                                            ): Null,
+                                            Symbol(
+                                                "@id",
+                                            ): Integer(
+                                                -1,
+                                            ),
+                                        },
+                                    },
+                                ),
+                                Symbol(
+                                    "@id",
+                                ): Integer(
+                                    -2,
+                                ),
+                            },
+                        },
+                    ),
+                    Symbol(
+                        "@id",
+                    ): Integer(
+                        -3,
+                    ),
+                },
+            },
+        ),
+    ],
+)

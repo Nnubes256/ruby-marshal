@@ -1,0 +1,8 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+license = "MIT OR BSD-2-Clause"
+edition = "2021"
+
+[dependencies]
+which = "4.3.0"

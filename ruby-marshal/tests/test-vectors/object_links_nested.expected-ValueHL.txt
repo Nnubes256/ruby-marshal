@@ -1,0 +1,98 @@
+[
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    :@a: RubyObject {
+                        class_name: "DumpTest",
+                        ivars: {
+                            :@a: nil,
+                            :@id: 1,
+                        },
+                    },
+                    :@id: 2,
+                },
+            },
+            :@id: 3,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    :@a: RubyObject {
+                        class_name: "DumpTest",
+                        ivars: {
+                            :@a: nil,
+                            :@id: 1,
+                        },
+                    },
+                    :@id: 2,
+                },
+            },
+            :@id: 3,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: nil,
+            :@id: -1,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    :@a: nil,
+                    :@id: -1,
+                },
+            },
+            :@id: -2,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    :@a: RubyObject {
+                        class_name: "DumpTest",
+                        ivars: {
+                            :@a: nil,
+                            :@id: -1,
+                        },
+                    },
+                    :@id: -2,
+                },
+            },
+            :@id: -3,
+        },
+    },
+    RubyObject {
+        class_name: "DumpTest",
+        ivars: {
+            :@a: RubyObject {
+                class_name: "DumpTest",
+                ivars: {
+                    :@a: RubyObject {
+                        class_name: "DumpTest",
+                        ivars: {
+                            :@a: nil,
+                            :@id: -1,
+                        },
+                    },
+                    :@id: -2,
+                },
+            },
+            :@id: -3,
+        },
+    },
+]
