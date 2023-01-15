@@ -1347,10 +1347,20 @@ pub struct RubyMapIter {
 }
 
 impl RubyMapIter {
+    /// **DO NOT USE:** this method is misleading and cannot be fixed, and it will be removed
+    /// on the next minor release. Use [`RubyMapIter::next_element`] instead, ensuring
+    /// you fully consume or skip the returned [`RubyType`] before retrieving the next one.
+    ///
     /// Consumes and returns the next pair of elements as a 2-tuple of [`RubyType`]s.
     ///
     /// Returns `Some((key, value))` if a tuple was deserialized, or `None` if the
     /// iterator has been fully exhausted.
+    #[deprecated(
+        since = "0.1.1",
+        note = "this method is misleading and cannot be fixed, and it will be removed
+        on the next minor release. Use `RubyMapIter::next_element` instead, ensuring
+        you fully consume or skip the returned `RubyType` before retrieving the next one."
+    )]
     pub fn next<'de>(
         &mut self,
         deserializer: &mut Deserializer<'de>,
@@ -1498,10 +1508,19 @@ pub struct RubyIvar {
 }
 
 impl RubyIvar {
+    /// **DO NOT USE:** this function is misleading and may fail or produce
+    /// incorrect results if the IVAR data turns out to have a container type.
+    /// Alternatives are currently being considered.
+    ///
     /// Reads the underlying boxed data into a [`RubyType`].
     ///
     /// Consumes this `RubyIvar` and returns the read data as a [`RubyType`] and a
     /// [`RubyMapIter`] over the instance variables.
+    #[deprecated(
+        since = "0.1.1",
+        note = "This function is misleading and may fail or produce incorrect results
+    if the IVAR data turns out to have a container type. Alternatives are currently being considered."
+    )]
     pub fn read_data<'de>(
         self,
         deserializer: &mut Deserializer<'de>,
