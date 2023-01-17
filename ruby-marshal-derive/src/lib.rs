@@ -78,12 +78,12 @@ fn derive_inner(input: DeriveInput) -> proc_macro2::TokenStream {
     };
     let imports = if top_options.crate_internal {
         quote! {
-            use crate::de::{Result as DeResult, Deserializer, FromRubyMarshal, RubyType, ParsingError};
+            use crate::de::{Result as DeResult, Deserializer, FromRubyMarshal, RubyType, RawRubyType, ParsingError};
         }
     } else {
         quote! {
             extern crate ruby_marshal as _ruby_marshal;
-            use _ruby_marshal::de::{Result as DeResult, Deserializer, FromRubyMarshal, RubyType, ParsingError};
+            use _ruby_marshal::de::{Result as DeResult, Deserializer, FromRubyMarshal, RubyType, RawRubyType, ParsingError};
         }
     };
 
@@ -226,13 +226,13 @@ fn parse_fields(struct_name: &Ident, generics: &Generics, data: &Data) -> syn::R
                         };
                         deserialize_fields_code.push(match field_type {
                             TyType::Required(_) => quote_spanned!(field.span()=>
-                                RubyType::Symbol(#name_string) => {
-                                    #var_name = it.next_element_of_type(&mut deserializer)?;
+                                RawRubyType::Symbol(#name_string) => {
+                                    #var_name = it.next_element_of_type()?;
                                 }
                             ),
                             TyType::Optional(_) => quote_spanned!(field.span()=>
-                                RubyType::Symbol(#name_string) => {
-                                    #var_name = it.next_element_of_type(&mut deserializer)?.flatten();
+                                RawRubyType::Symbol(#name_string) => {
+                                    #var_name = it.next_element_of_type()?.flatten();
                                 }
                             ),
                         });
@@ -267,22 +267,22 @@ fn parse_fields(struct_name: &Ident, generics: &Generics, data: &Data) -> syn::R
                     let var_name = ivar_meta.var_name;
                     let ivar_data_read = match ivar_meta.field_type {
                         TyType::Required(_) => quote_spanned!(ivar_meta.field.span()=>
-                            let (ivar_data, mut it) = iv.read_data_of_type(&mut deserializer)?;
+                            let (ivar_data, mut it) = iv.read_data_of_type()?;
                             #var_name = Some(ivar_data);
                         ),
                         TyType::Optional(_) => quote_spanned!(ivar_meta.field.span()=>
-                            let (ivar_data, mut it) = iv.read_data_of_type(&mut deserializer)?;
+                            let (ivar_data, mut it) = iv.read_data_of_type()?;
                             #var_name = ivar_data;
                         ),
                     };
                     quote! {
                         RubyType::InstanceVariable(mut iv) => {
                             #ivar_data_read
-                            while let Some(key) = it.next_element(&mut deserializer)? {
+                            while let Some(mut key) = it.next_raw_element()? {
                                 match key {
                                     #(#deserialize_fields_code),*
                                     _ => {
-                                        let _ = it.next_element(&mut deserializer)?;
+                                        let _ = it.skip_element()?;
                                     }
                                 }
                             }
@@ -292,11 +292,11 @@ fn parse_fields(struct_name: &Ident, generics: &Generics, data: &Data) -> syn::R
                 } else {
                     quote! {
                         RubyType::Hash(mut it) => {
-                            while let Some(key) = it.next_element(&mut deserializer)? {
+                            while let Some(mut key) = it.next_raw_element()? {
                                 match key {
                                     #(#deserialize_fields_code),*
                                     _ => {
-                                        let _ = it.next_element(&mut deserializer)?;
+                                        let _ = it.skip_element()?;
                                     }
                                 }
                             }
@@ -308,10 +308,9 @@ fn parse_fields(struct_name: &Ident, generics: &Generics, data: &Data) -> syn::R
                     #[automatically_derived]
                     impl<'de> FromRubyMarshal<'de> for #impl_struct_name {
                         fn deserialize(deserializer: &mut Deserializer<'de>) -> DeResult<Self> {
-                            let mut deserializer = deserializer.prepare()?;
                             #(#deserialize_fields_def)*
 
-                            match deserializer.next_element()? {
+                            match deserializer.next_element()?.get() {
                                 #deser_match_body
                             }
 

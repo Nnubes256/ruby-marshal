@@ -71,8 +71,7 @@ pub enum ValueLL {
 
 impl<'de> FromRubyMarshal<'de> for ValueLL {
     fn deserialize(deserializer: &mut crate::de::Deserializer<'de>) -> Result<Self, ParsingError> {
-        let mut deserializer = deserializer.prepare()?;
-        Ok(match deserializer.next_element()? {
+        Ok(match deserializer.next_element()?.get() {
             RubyType::Null => ValueLL::Null,
             RubyType::True => ValueLL::Boolean(true),
             RubyType::False => ValueLL::Boolean(false),
@@ -80,17 +79,16 @@ impl<'de> FromRubyMarshal<'de> for ValueLL {
             RubyType::Float(x) => ValueLL::Float(x),
             RubyType::Array(mut it) => {
                 let mut v = Vec::with_capacity(it.size_hint());
-                while let Some(element) = it.next_of_type(&mut deserializer)? {
+                while let Some(element) = it.next_of_type()? {
                     v.push(element);
                 }
                 ValueLL::Array(v)
             }
             RubyType::Hash(mut it) => {
                 let mut v = Vec::with_capacity(it.size_hint_pairs());
-                while let (Some(a), Some(b)) = (
-                    it.next_element_of_type(&mut deserializer)?,
-                    it.next_element_of_type(&mut deserializer)?,
-                ) {
+                while let (Some(a), Some(b)) =
+                    (it.next_element_of_type()?, it.next_element_of_type()?)
+                {
                     v.push((a, b));
                 }
                 ValueLL::Hash(v)
@@ -98,12 +96,12 @@ impl<'de> FromRubyMarshal<'de> for ValueLL {
             RubyType::Symbol(s) => ValueLL::Symbol(s.to_owned()),
             RubyType::ByteArray(a) => ValueLL::ByteArray(a.to_owned()),
             RubyType::InstanceVariable(iv) => {
-                let (data, mut map_it) = iv.read_data_of_type(&mut deserializer)?;
+                let (data, mut map_it) = iv.read_data_of_type()?;
 
                 let mut v = Vec::with_capacity(map_it.size_hint_pairs());
                 while let (Some(a), Some(b)) = (
-                    map_it.next_element_of_type(&mut deserializer)?,
-                    map_it.next_element_of_type(&mut deserializer)?,
+                    map_it.next_element_of_type()?,
+                    map_it.next_element_of_type()?,
                 ) {
                     v.push((a, b));
                 }
@@ -119,8 +117,8 @@ impl<'de> FromRubyMarshal<'de> for ValueLL {
             RubyType::Object(mut s) => {
                 let mut v = Vec::with_capacity(s.fields.size_hint_pairs());
                 while let (Some(a), Some(b)) = (
-                    s.fields.next_element_of_type(&mut deserializer)?,
-                    s.fields.next_element_of_type(&mut deserializer)?,
+                    s.fields.next_element_of_type()?,
+                    s.fields.next_element_of_type()?,
                 ) {
                     v.push((a, b));
                 }
@@ -237,8 +235,7 @@ impl Debug for ValueHL {
 
 impl<'de> FromRubyMarshal<'de> for ValueHL {
     fn deserialize(deserializer: &mut crate::de::Deserializer<'de>) -> Result<Self, ParsingError> {
-        let mut deserializer = deserializer.prepare()?;
-        if deserializer.peek_type()? == RubyTypeTag::InstanceVariable {
+        if deserializer.peek_type_across_link()? == RubyTypeTag::InstanceVariable {
             {
                 let mut checkpoint = deserializer.checkpoint();
                 if let Ok(val) = String::deserialize(&mut checkpoint) {
@@ -254,7 +251,7 @@ impl<'de> FromRubyMarshal<'de> for ValueHL {
                 }
             }
         }
-        Ok(match deserializer.next_element()? {
+        Ok(match deserializer.next_element()?.get() {
             RubyType::Null => ValueHL::Null,
             RubyType::True => ValueHL::Boolean(true),
             RubyType::False => ValueHL::Boolean(false),
@@ -262,17 +259,16 @@ impl<'de> FromRubyMarshal<'de> for ValueHL {
             RubyType::Float(x) => ValueHL::Float(x),
             RubyType::Array(mut it) => {
                 let mut v = Vec::with_capacity(it.size_hint());
-                while let Some(element) = it.next_of_type(&mut deserializer)? {
+                while let Some(element) = it.next_of_type()? {
                     v.push(element);
                 }
                 ValueHL::Array(v)
             }
             RubyType::Hash(mut it) => {
                 let mut v = Vec::with_capacity(it.size_hint_pairs());
-                while let (Some(a), Some(b)) = (
-                    it.next_element_of_type(&mut deserializer)?,
-                    it.next_element_of_type(&mut deserializer)?,
-                ) {
+                while let (Some(a), Some(b)) =
+                    (it.next_element_of_type()?, it.next_element_of_type()?)
+                {
                     v.push((a, b));
                 }
                 ValueHL::Hash(v)
@@ -280,12 +276,12 @@ impl<'de> FromRubyMarshal<'de> for ValueHL {
             RubyType::Symbol(s) => ValueHL::Symbol(s.to_owned()),
             RubyType::ByteArray(a) => ValueHL::ByteArray(a.to_owned()),
             RubyType::InstanceVariable(iv) => {
-                let (data, mut map_it) = iv.read_data_of_type(&mut deserializer)?;
+                let (data, mut map_it) = iv.read_data_of_type()?;
 
                 let mut v = Vec::with_capacity(map_it.size_hint_pairs());
                 while let (Some(a), Some(b)) = (
-                    map_it.next_element_of_type(&mut deserializer)?,
-                    map_it.next_element_of_type(&mut deserializer)?,
+                    map_it.next_element_of_type()?,
+                    map_it.next_element_of_type()?,
                 ) {
                     v.push((a, b));
                 }
@@ -304,8 +300,8 @@ impl<'de> FromRubyMarshal<'de> for ValueHL {
                 //println!("{}", s.class_name);
                 let mut v = Vec::with_capacity(s.fields.size_hint_pairs());
                 while let (Some(a), Some(b)) = (
-                    s.fields.next_element_of_type(&mut deserializer)?,
-                    s.fields.next_element_of_type(&mut deserializer)?,
+                    s.fields.next_element_of_type()?,
+                    s.fields.next_element_of_type()?,
                 ) {
                     v.push((a, b));
                 }
@@ -347,15 +343,13 @@ where
     Value: FromRubyMarshal<'de> + Debug,
 {
     fn deserialize(deserializer: &mut crate::Deserializer<'de>) -> Result<Self, ParsingError> {
-        let mut deserializer = deserializer.prepare()?;
-
-        if let RubyType::InstanceVariable(iv) = deserializer.next_element()? {
-            let (data, mut map_it) = iv.read_data_of_type(&mut deserializer)?;
+        if let RubyType::InstanceVariable(iv) = deserializer.next_element()?.get() {
+            let (data, mut map_it) = iv.read_data_of_type()?;
 
             let mut v = Vec::with_capacity(map_it.size_hint_pairs());
             while let (Some(a), Some(b)) = (
-                map_it.next_element_of_type(&mut deserializer)?,
-                map_it.next_element_of_type(&mut deserializer)?,
+                map_it.next_element_of_type()?,
+                map_it.next_element_of_type()?,
             ) {
                 v.push((a, b));
             }
@@ -471,8 +465,7 @@ struct RegExpRawIvar<'de> {
 
 impl<'de> FromRubyMarshal<'de> for RubyRegExpHL {
     fn deserialize(deserializer: &mut crate::Deserializer<'de>) -> Result<Self, ParsingError> {
-        let mut deserializer = deserializer.prepare()?;
-        let regexp_ivar = RegExpRawIvar::deserialize(&mut deserializer)?;
+        let regexp_ivar = RegExpRawIvar::deserialize(deserializer)?;
 
         if regexp_ivar.encoding_short.is_some() {
             // either true (UTF-8) or false (US-ASCII),

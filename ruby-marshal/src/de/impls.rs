@@ -7,11 +7,10 @@ use std::collections::HashMap;
 
 use ruby_marshal_derive::FromRubyMarshal;
 
-use super::{FromRubyMarshal, ParsingError, Result, RubyType, RubyTypeTag};
+use super::{FromRubyMarshal, ParsingError, RawRubyType, Result, RubyType, RubyTypeTag};
 
 impl<'de> FromRubyMarshal<'de> for PhantomData<()> {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
         deserializer.skip_element()?;
         Ok(PhantomData)
     }
@@ -19,10 +18,9 @@ impl<'de> FromRubyMarshal<'de> for PhantomData<()> {
 
 impl<'de> FromRubyMarshal<'de> for bool {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
-            RubyType::True => Ok(true),
-            RubyType::False => Ok(false),
+        match deserializer.next_raw_element()? {
+            RawRubyType::True => Ok(true),
+            RawRubyType::False => Ok(false),
             _ => Err(ParsingError::Message("Expected bool".to_string())),
         }
     }
@@ -33,9 +31,8 @@ macro_rules! impl_deserialize_for_num {
         $(
             impl<'de> FromRubyMarshal<'de> for $ty {
                 fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-                    let mut deserializer = deserializer.prepare()?;
-                    match deserializer.next_element()? {
-                        RubyType::Integer(x) => x
+                    match deserializer.next_raw_element()? {
+                        RawRubyType::Integer(x) => x
                             .try_into()
                             .map_err(|x: TryFromIntError| ParsingError::Message(x.to_string())),
                         _ => Err(ParsingError::Message(concat!("Expected ", stringify!($ty)).to_string())),
@@ -50,9 +47,8 @@ impl_deserialize_for_num!(u8 u16 u32 u64 u128 i8 i16 usize isize);
 
 impl<'de> FromRubyMarshal<'de> for i32 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
-            RubyType::Integer(x) => Ok(x),
+        match deserializer.next_raw_element()? {
+            RawRubyType::Integer(x) => Ok(x),
             _ => Err(ParsingError::Message("Expected i32".to_string())),
         }
     }
@@ -60,9 +56,8 @@ impl<'de> FromRubyMarshal<'de> for i32 {
 
 impl<'de> FromRubyMarshal<'de> for i64 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
-            RubyType::Integer(x) => Ok(i64::from(x)),
+        match deserializer.next_raw_element()? {
+            RawRubyType::Integer(x) => Ok(i64::from(x)),
             _ => Err(ParsingError::Message("Expected i64".to_string())),
         }
     }
@@ -70,9 +65,8 @@ impl<'de> FromRubyMarshal<'de> for i64 {
 
 impl<'de> FromRubyMarshal<'de> for i128 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
-            RubyType::Integer(x) => Ok(i128::from(x)),
+        match deserializer.next_raw_element()? {
+            RawRubyType::Integer(x) => Ok(i128::from(x)),
             _ => Err(ParsingError::Message("Expected i128".to_string())),
         }
     }
@@ -82,8 +76,7 @@ impl<'de> FromRubyMarshal<'de> for i128 {
 #[allow(clippy::cast_possible_truncation)]
 impl<'de> FromRubyMarshal<'de> for f32 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
+        match deserializer.next_element()?.get() {
             RubyType::Float(x) => Ok(x as f32),
             _ => Err(ParsingError::Message("Expected i32".to_string())),
         }
@@ -92,8 +85,7 @@ impl<'de> FromRubyMarshal<'de> for f32 {
 
 impl<'de> FromRubyMarshal<'de> for f64 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
+        match deserializer.next_element()?.get() {
             RubyType::Float(x) => Ok(x),
             _ => Err(ParsingError::Message("Expected i32".to_string())),
         }
@@ -102,8 +94,7 @@ impl<'de> FromRubyMarshal<'de> for f64 {
 
 impl<'de> FromRubyMarshal<'de> for &'de [u8] {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
+        match deserializer.next_element()?.get() {
             RubyType::ByteArray(a) => Ok(a),
             _ => Err(ParsingError::Message("Expected byte array".to_string())),
         }
@@ -115,13 +106,12 @@ where
     T: FromRubyMarshal<'de>,
 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.peek_type()? {
+        match deserializer.peek_type_across_link()? {
             RubyTypeTag::Null => {
                 deserializer.skip_element()?; // which is null
                 Ok(None)
             }
-            _ => Ok(Some(T::deserialize(&mut deserializer)?)),
+            _ => Ok(Some(T::deserialize(deserializer)?)),
         }
     }
 }
@@ -131,11 +121,10 @@ where
     T: FromRubyMarshal<'de>,
 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
+        match deserializer.next_element()?.get() {
             RubyType::Array(mut it) => {
                 let mut vec = Vec::with_capacity(it.size_hint());
-                while let Some(el) = it.next_of_type(&mut deserializer)? {
+                while let Some(el) = it.next_of_type()? {
                     vec.push(el);
                 }
                 Ok(vec)
@@ -151,14 +140,12 @@ where
     U: FromRubyMarshal<'de>,
 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
+        match deserializer.next_element()?.get() {
             RubyType::Hash(mut it) => {
                 let mut vec = Vec::with_capacity(it.size_hint_pairs());
-                while let (Some(key), Some(value)) = (
-                    it.next_element_of_type(&mut deserializer)?,
-                    it.next_element_of_type(&mut deserializer)?,
-                ) {
+                while let (Some(key), Some(value)) =
+                    (it.next_element_of_type()?, it.next_element_of_type()?)
+                {
                     vec.push((key, value));
                 }
                 Ok(vec)
@@ -173,8 +160,7 @@ where
     T: FromRubyMarshal<'de>,
 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        Ok(Box::new(T::deserialize(&mut deserializer)?))
+        Ok(Box::new(T::deserialize(deserializer)?))
     }
 }
 
@@ -190,8 +176,7 @@ struct StringRaw<'de> {
 
 impl<'de> FromRubyMarshal<'de> for String {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        let string_ivar = StringRaw::deserialize(&mut deserializer)?;
+        let string_ivar = StringRaw::deserialize(deserializer)?;
         if string_ivar.encoding_short.is_some() {
             // either true (UTF-8) or false (US-ASCII),
             // we can parse normally
@@ -229,8 +214,7 @@ impl<'de> FromRubyMarshal<'de> for String {
 
 impl<'de> FromRubyMarshal<'de> for Cow<'de, str> {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        let string_ivar = StringRaw::deserialize(&mut deserializer)?;
+        let string_ivar = StringRaw::deserialize(deserializer)?;
         if string_ivar.encoding_short.is_some() {
             // either true (UTF-8) or false (US-ASCII),
             // we can parse normally
@@ -273,15 +257,13 @@ where
     V: FromRubyMarshal<'de>,
 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
+        match deserializer.next_element()?.get() {
             RubyType::Hash(mut it) => {
                 let mut map =
                     HashMap::with_capacity_and_hasher(it.size_hint_pairs(), Default::default());
-                while let (Some(key), Some(value)) = (
-                    it.next_element_of_type(&mut deserializer)?,
-                    it.next_element_of_type(&mut deserializer)?,
-                ) {
+                while let (Some(key), Some(value)) =
+                    (it.next_element_of_type()?, it.next_element_of_type()?)
+                {
                     map.insert(key, value);
                 }
                 Ok(map)
@@ -297,14 +279,12 @@ where
     V: FromRubyMarshal<'de>,
 {
     fn deserialize(deserializer: &mut super::Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-        match deserializer.next_element()? {
+        match deserializer.next_element()?.get() {
             RubyType::Hash(mut it) => {
                 let mut map = BTreeMap::new();
-                while let (Some(key), Some(value)) = (
-                    it.next_element_of_type(&mut deserializer)?,
-                    it.next_element_of_type(&mut deserializer)?,
-                ) {
+                while let (Some(key), Some(value)) =
+                    (it.next_element_of_type()?, it.next_element_of_type()?)
+                {
                     map.insert(key, value);
                 }
                 Ok(map)

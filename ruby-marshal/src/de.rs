@@ -171,10 +171,10 @@ pub enum ParsingError {
     /// (by calling [`Deserializer#prepare`] every time an object which may contain an object link is deserialized.
     ///
     /// This can normally be resolved by ensuring any custom [`FromRubyMarshal`] implementations contain
-    /// `let mut deserializer = deserializer.prepare()?` at the top of the implementation, but if the implementation
+    /// `let mut deserializer = deserializer.create_frame()?` at the top of the implementation, but if the implementation
     /// requires multiple nested calls to [`next_element`](`Frame#next_element`) then it may require inserting
-    /// `let mut deserializer = deserializer.prepare()?` for each call.
-    #[error("Found a nested object link on the current frame; caller should insert an extra `deserializer.prepare()?` in order to handle this condition")]
+    /// `let mut deserializer = deserializer.create_frame()?` for each call.
+    #[error("Found a nested object link on the current frame; caller should insert an extra `deserializer.create_frame()?` in order to handle this condition")]
     DoubleObjectLink,
 
     /// Another kind of error was thrown, with the provided message.
@@ -219,53 +219,6 @@ pub type Result<T> = ::core::result::Result<T, ParsingError>;
 /// However, more control may be desired from deserialization; in this case, one may implement
 /// `FromRubyMarshal` manually.
 ///
-/// ## Rules for manual implementations
-///
-/// - **Always** start by creating a new [`Frame`]. The best way to do this is by inserting a
-///   [`Deserializer::prepare()`] call on the first line that shadows the provided deserializer:
-///
-///   ```
-///   # struct T;
-///   use ruby_marshal::de::{FromRubyMarshal, Deserializer, Result};
-///
-///   impl<'de> FromRubyMarshal<'de> for T {
-///       fn deserialize(deserializer: &mut Deserializer<'de>) -> Result<Self> {
-///           let mut deserializer = deserializer.prepare()?; // <-- add this before
-///                                                           //     doing anything
-///
-///           // ...you may now start deserializing...
-///   #       Ok(T)
-///       }
-///   }
-///   ```
-///
-/// - If deserializing multiple elements within the same function, it can be wise to
-///   create additional frames in between.
-///
-///   ```
-///   # struct T;
-///   # use ruby_marshal::de::ParsingError;
-///   use ruby_marshal::de::{FromRubyMarshal, Deserializer, Result, RubyType};
-///
-///   impl<'de> FromRubyMarshal<'de> for T {
-///       fn deserialize(deserializer: &mut Deserializer<'de>) -> Result<Self> {
-///           let mut deserializer = deserializer.prepare()?; // <-- first frame
-///
-///           match deserializer.next_element()? {
-///               RubyType::Array(mut iter) => {
-///                   // second frame, now parent of the first frame
-///                   let mut deserializer = deserializer.prepare()?;
-///
-///                   // ...you can now safely deserialize the array inline...
-///   #               Ok(T)
-///               }
-///               // ...
-///   #           _ => Err(ParsingError::Message("test message".to_string()))
-///           }
-///       }
-///   }
-///   ```
-///
 /// - When handling arrays, maps, objects and IVAR objects, **always** either
 ///   fully consume them, or skip them.
 ///
@@ -276,19 +229,15 @@ pub type Result<T> = ::core::result::Result<T, ParsingError>;
 ///   #
 ///   # impl<'de> FromRubyMarshal<'de> for T {
 ///   #    fn deserialize(deserializer: &mut Deserializer<'de>) -> Result<Self> {
-///   #        let mut deserializer = deserializer.prepare()?;
-///   #
-///   match deserializer.next_element()? {
+///   match deserializer.next_element()?.get() {
 ///       RubyType::Array(mut iter) => {
-///           let mut deserializer = deserializer.prepare()?;
-///
 ///           // WRONG: consume one element and then drop `iter`
-///           iter.next(&mut deserializer);
+///           let _ = iter.next();
 ///           //drop(iter);
 ///
 ///           // CORRECT: consume one element and then call iter.skip()
-///           iter.next(&mut deserializer);
-///           iter.skip(&mut deserializer);
+///           let _ = iter.next();
+///           iter.skip();
 ///   #       Ok(T)
 ///       }
 ///   #   _ => Err(ParsingError::Message("test message".to_string()))
@@ -303,7 +252,7 @@ pub trait FromRubyMarshal<'de>: Sized {
     fn deserialize(deserializer: &mut Deserializer<'de>) -> Result<Self>;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum ParsingState {
     Header,
     Element,
@@ -433,13 +382,44 @@ impl<'de> Deserializer<'de> {
 
     /// Peeks the next type to parse without actually consuming the input.
     ///
-    /// # Notes
+    /// This method **will** follow object links.
+    pub fn peek_type_across_link(&mut self) -> Result<RubyTypeTag> {
+        self.ensure_version_read()?;
+        let ret = self.peek_type()?;
+        let ret = if ret == RubyTypeTag::ObjectLink {
+            let mut checkpoint = self.checkpoint();
+            let RawRubyType::ObjectLink(link) = checkpoint.parse_raw_element()? else {
+                unreachable!();
+            };
+            checkpoint.jump_to_object_ref(link)?;
+            let ret = checkpoint.peek_type()?;
+            checkpoint.ret_from_object_ref();
+
+            ret
+            // returns to original state after here
+        } else {
+            ret
+        };
+        Ok(ret)
+    }
+
+    /// Peeks the next type to parse without actually consuming the input.
     ///
-    /// This method won't follow object links in order to preserve determinism.
-    /// If this method returns a [`RubyTypeTag::ObjectLink`] and this is not intended,
-    /// that often means a call to [`Deserializer::prepare()`] is missing.
+    /// This method **won't** follow object links.
     pub fn peek_type(&self) -> Result<RubyTypeTag> {
-        match self.peek_byte()? {
+        match self.state {
+            ParsingState::Header => {
+                if self.input.len() < 2 {
+                    return Err(ParsingError::Eof);
+                }
+                self.peek_raw_type_at_location(&self.input[2..])
+            }
+            ParsingState::Element => self.peek_raw_type_at_location(self.input),
+        }
+    }
+
+    fn peek_raw_type_at_location(&self, input: &[u8]) -> Result<RubyTypeTag> {
+        match input.first().copied().ok_or(ParsingError::Eof)? {
             b'0' => Ok(RubyTypeTag::Null),
             b'T' => Ok(RubyTypeTag::True),
             b'F' => Ok(RubyTypeTag::False),
@@ -637,30 +617,30 @@ impl<'de> Deserializer<'de> {
         str::from_utf8(out).map_err(ParsingError::InvalidUtf8OnModuleRef)
     }
 
-    fn read_array(&mut self) -> Result<RubyArrayIter> {
+    fn read_array(&mut self) -> Result<RawRubyArrayIter> {
         let raw_length = self.read_packed_integer()?;
         let length = raw_length
             .try_into()
             .map_err(|_| ParsingError::UnexpectedNegativeLength(raw_length, RubyTypeTag::Array))?;
-        Ok(RubyArrayIter {
+        Ok(RawRubyArrayIter {
             length,
             current_index: 0,
         })
     }
 
-    fn read_hash(&mut self) -> Result<RubyMapIter> {
+    fn read_hash(&mut self) -> Result<RawRubyMapIter> {
         let raw_length = self.read_packed_integer()?;
         let length = raw_length
             .try_into()
             .map_err(|_| ParsingError::UnexpectedNegativeLength(raw_length, RubyTypeTag::Hash))?;
-        Ok(RubyMapIter {
+        Ok(RawRubyMapIter {
             num_pairs: length,
             current_index: 0,
         })
     }
 
-    fn read_object(&mut self) -> Result<RubyObject<'de>> {
-        let class_name = if let RubyType::Symbol(sym) = self.next_element()? {
+    fn read_object(&mut self) -> Result<RawRubyObject<'de>> {
+        let class_name = if let RawRubyType::Symbol(sym) = self.next_raw_element()? {
             sym
         } else {
             return Err(ParsingError::Message(
@@ -669,11 +649,11 @@ impl<'de> Deserializer<'de> {
         };
         self.add_current_position_as_blacklisted();
         let fields = self.read_hash()?;
-        Ok(RubyObject { class_name, fields })
+        Ok(RawRubyObject { class_name, fields })
     }
 
     fn read_userdef(&mut self) -> Result<RubyUserDef<'de>> {
-        let class_name = if let RubyType::Symbol(sym) = self.next_element()? {
+        let class_name = if let RawRubyType::Symbol(sym) = self.next_raw_element()? {
             sym
         } else {
             return Err(ParsingError::Message(
@@ -684,9 +664,8 @@ impl<'de> Deserializer<'de> {
         Ok(RubyUserDef { class_name, data })
     }
 
-    /// Sets up the deserializer for further parsing.
+    /// Manually sets up the deserializer for further parsing.
     ///
-    /// Calling this method is **required** in order to retrieve new elements (through [`Frame#next_element`]).
     /// The deserializer ensures the header data is read, performs tracking of stack
     /// depth and follows object links if they are found. The provided [`Frame`] also ensures
     /// the deserializer returns from any followed object references once it is dropped.
@@ -707,10 +686,10 @@ impl<'de> Deserializer<'de> {
     ///
     /// impl<'de> FromRubyMarshal<'de> for MyCustomData {
     ///     fn deserialize(deserializer: &mut Deserializer<'de>) -> Result<Self> {
-    ///         let mut deserializer = deserializer.prepare()?;
+    ///         let mut deserializer = deserializer.create_frame()?;
     ///
     ///         // Now the deserializer is proxied through the created `Frame`,
-    ///         // the following call to `deserializer.next_element()` is safe.
+    ///         // the following call to `deserializer.next_raw_element()` is safe.
     ///         // You can still use `T::deserialize(&mut deserializer)` to deserialize
     ///         // a subtype.
     ///
@@ -723,14 +702,14 @@ impl<'de> Deserializer<'de> {
     /// ```
     ///
     ///
-    pub fn prepare<'deser>(&'deser mut self) -> Result<Frame<'de, 'deser>> {
+    pub fn create_frame<'deser>(&'deser mut self) -> Result<Frame<'de, 'deser>> {
         if self.current_frame_depth > self.max_frame_depth {
             return Err(ParsingError::RecursionLimitExceeded);
         }
         self.ensure_version_read()?;
         self.current_frame_depth += 1;
         let within_object_link = if self.peek_type()? == RubyTypeTag::ObjectLink {
-            let RubyType::ObjectLink(link) = self.next_element()? else {
+            let RawRubyType::ObjectLink(link) = self.next_raw_element()? else {
                 unreachable!();
             };
 
@@ -809,70 +788,84 @@ impl<'de> Deserializer<'de> {
         self.checkpoints.pop().expect("No checkpoints left!");
     }
 
-    #[doc(hidden)]
-    fn parse_element(&mut self) -> Result<RubyType<'de>> {
+    fn parse_raw_element(&mut self) -> Result<RawRubyType<'de>> {
         let position_with_tag = <&[u8]>::clone(&self.input);
         match self.read_type_tag()? {
-            RubyTypeTag::Null => Ok(RubyType::Null),
-            RubyTypeTag::True => Ok(RubyType::True),
-            RubyTypeTag::False => Ok(RubyType::False),
-            RubyTypeTag::Integer => Ok(RubyType::Integer(self.read_packed_integer()?)),
+            RubyTypeTag::Null => Ok(RawRubyType::Null),
+            RubyTypeTag::True => Ok(RawRubyType::True),
+            RubyTypeTag::False => Ok(RawRubyType::False),
+            RubyTypeTag::Integer => Ok(RawRubyType::Integer(self.read_packed_integer()?)),
             RubyTypeTag::Float => {
                 self.register_ref_in_object_table(position_with_tag);
-                Ok(RubyType::Float(self.read_float()?))
+                Ok(RawRubyType::Float(self.read_float()?))
             }
             RubyTypeTag::Array => {
                 self.register_ref_in_object_table(position_with_tag);
-                Ok(RubyType::Array(self.read_array()?))
+                Ok(RawRubyType::Array(self.read_array()?))
             }
             RubyTypeTag::Hash => {
                 self.register_ref_in_object_table(position_with_tag);
-                Ok(RubyType::Hash(self.read_hash()?))
+                Ok(RawRubyType::Hash(self.read_hash()?))
             }
-            RubyTypeTag::Symbol => Ok(RubyType::Symbol(self.read_symbol()?)),
-            RubyTypeTag::Symlink => Ok(RubyType::Symbol(self.read_symlink()?)),
+            RubyTypeTag::Symbol => Ok(RawRubyType::Symbol(self.read_symbol()?)),
+            RubyTypeTag::Symlink => Ok(RawRubyType::Symbol(self.read_symlink()?)),
             RubyTypeTag::InstanceVariable => {
                 self.register_ref_in_object_table(position_with_tag);
-                Ok(RubyType::InstanceVariable(RubyIvar {
+                Ok(RawRubyType::InstanceVariable(RawRubyIvar {
                     _private: PhantomData,
                 }))
             }
             RubyTypeTag::UserDef => {
                 self.register_ref_in_object_table(position_with_tag);
-                Ok(RubyType::UserDef(self.read_userdef()?))
+                Ok(RawRubyType::UserDef(self.read_userdef()?))
             }
             RubyTypeTag::ByteArray => {
                 self.register_ref_in_object_table(position_with_tag);
 
-                Ok(RubyType::ByteArray(self.read_byte_string()?))
+                Ok(RawRubyType::ByteArray(self.read_byte_string()?))
             }
             RubyTypeTag::ObjectLink => {
                 let raw_index = self.read_packed_integer()?;
                 let index: usize = raw_index
                     .try_into()
                     .map_err(|_| ParsingError::ObjectLinkIndexTooLarge(raw_index))?;
-                Ok(RubyType::ObjectLink(index))
+                Ok(RawRubyType::ObjectLink(index))
             }
             RubyTypeTag::RawRegexp => {
                 self.register_ref_in_object_table(position_with_tag);
-                Ok(RubyType::RawRegexp(self.read_regexp()?))
+                Ok(RawRubyType::RawRegexp(self.read_regexp()?))
             }
             RubyTypeTag::ClassRef => {
                 self.register_ref_in_object_table(position_with_tag);
-                Ok(RubyType::ClassRef(self.read_classref()?))
+                Ok(RawRubyType::ClassRef(self.read_classref()?))
             }
             RubyTypeTag::ModuleRef => {
                 self.register_ref_in_object_table(position_with_tag);
-                Ok(RubyType::ModuleRef(self.read_moduleref()?))
+                Ok(RawRubyType::ModuleRef(self.read_moduleref()?))
             }
             RubyTypeTag::Object => {
                 self.register_ref_in_object_table(position_with_tag);
-                Ok(RubyType::Object(self.read_object()?))
+                Ok(RawRubyType::Object(self.read_object()?))
             }
         }
     }
 
-    fn next_element(&mut self) -> Result<RubyType<'de>> {
+    pub fn next_raw_element(&mut self) -> Result<RawRubyType<'de>> {
+        match self.state {
+            ParsingState::Header => {
+                self.next_byte()?;
+                self.next_byte()?;
+                self.state = ParsingState::Element;
+                return self.next_raw_element();
+            }
+            ParsingState::Element => self.parse_raw_element(),
+        }
+    }
+
+    pub fn next_element<'deser>(&'deser mut self) -> Result<RubyTypeGuard<'de, 'deser>> {
+        if self.current_frame_depth > self.max_frame_depth {
+            return Err(ParsingError::RecursionLimitExceeded);
+        }
         match self.state {
             ParsingState::Header => {
                 self.next_byte()?;
@@ -880,7 +873,25 @@ impl<'de> Deserializer<'de> {
                 self.state = ParsingState::Element;
                 return self.next_element();
             }
-            ParsingState::Element => self.parse_element(),
+            ParsingState::Element => {
+                let mut within_object_link = false;
+                let raw = self.parse_raw_element()?;
+                let element = if let RawRubyType::ObjectLink(link) = raw {
+                    // TODO handle nested
+                    self.jump_to_object_ref(link)?;
+                    within_object_link = true;
+                    self.parse_raw_element()?
+                } else {
+                    raw
+                };
+
+                self.current_frame_depth += 1;
+                Ok(RubyTypeGuard {
+                    inner: element,
+                    deserializer: self,
+                    within_object_link,
+                })
+            }
         }
     }
 
@@ -898,11 +909,11 @@ impl<'de> Deserializer<'de> {
                 self.state = ParsingState::Element;
                 return self.skip_element();
             }
-            ParsingState::Element => match self.parse_element()? {
-                RubyType::Array(it) => it.skip(self)?,
-                RubyType::Hash(it) => it.skip(self)?,
-                RubyType::InstanceVariable(iv) => iv.skip(self)?,
-                RubyType::Object(obj) => obj.skip(self)?,
+            ParsingState::Element => match self.parse_raw_element()? {
+                RawRubyType::Array(it) => it.skip(self)?,
+                RawRubyType::Hash(it) => it.skip(self)?,
+                RawRubyType::InstanceVariable(iv) => iv.skip(self)?,
+                RawRubyType::Object(obj) => obj.skip(self)?,
                 _ => (),
             },
         }
@@ -922,6 +933,27 @@ impl<'de> Deserializer<'de> {
     }
 }
 
+pub struct RubyTypeGuard<'de, 'deser> {
+    inner: RawRubyType<'de>,
+    deserializer: &'deser mut Deserializer<'de>,
+    within_object_link: bool,
+}
+
+impl<'de, 'deser> RubyTypeGuard<'de, 'deser> {
+    pub fn get<'a>(&'a mut self) -> RubyType<'de, 'a> {
+        RubyType::from_raw(self.inner.clone(), self.deserializer)
+    }
+}
+
+impl<'de, 'deser> Drop for RubyTypeGuard<'de, 'deser> {
+    fn drop(&mut self) {
+        if self.within_object_link {
+            self.deserializer.ret_from_object_ref();
+        }
+        self.deserializer.current_frame_depth -= 1;
+    }
+}
+
 /// A stack guard used to read data from a [`Deserializer`].
 ///
 /// `Frame`s are used on [`FromRubyMarshal`] implementations to ensure:
@@ -929,12 +961,57 @@ impl<'de> Deserializer<'de> {
 /// 1. That object references are correctly handled
 /// 2. That the configured recursion depth is not exceeded.
 ///
-/// A `Frame` may be obtained by calling [`Deserializer::prepare()`]. Once obtained, it is meant
+/// A `Frame` may be obtained by calling [`Deserializer::create_frame()`]. Once obtained, it is meant
 /// to be used as a stand-in of the parent [`Deserializer`] until the element is fully read.
 ///
 /// # Implementation considerations
 ///
-/// See [`FromRubyMarshal`].
+/// - If using [`Frame`], create the [`Frame`] before doing any deserializing. The best way to do this
+///   is by inserting a [`Deserializer::create_frame()`] call on the first line that shadows the provided
+///   deserializer:
+///
+///   ```
+///   # struct T;
+///   use ruby_marshal::de::{FromRubyMarshal, Deserializer, Result};
+///
+///   impl<'de> FromRubyMarshal<'de> for T {
+///       fn deserialize(deserializer: &mut Deserializer<'de>) -> Result<Self> {
+///           let mut deserializer = deserializer.create_frame()?; // <-- add this before
+///                                                           //     doing anything
+///
+///           // ...you may now start deserializing...
+///   #       Ok(T)
+///       }
+///   }
+///   ```
+///
+/// - If deserializing multiple elements within the same function, it can be wise to
+///   create additional frames in between.
+///
+///   ```
+///   # struct T;
+///   # use ruby_marshal::de::ParsingError;
+///   use ruby_marshal::de::{FromRubyMarshal, Deserializer, Result, RawRubyType};
+///
+///   impl<'de> FromRubyMarshal<'de> for T {
+///       fn deserialize(deserializer: &mut Deserializer<'de>) -> Result<Self> {
+///           let mut deserializer = deserializer.create_frame()?; // <-- first frame
+///
+///           match deserializer.next_raw_element()? {
+///               RawRubyType::Array(mut iter) => {
+///                   // second frame, now parent of the first frame
+///                   let mut deserializer = deserializer.create_frame()?;
+///
+///                   // ...you can now safely deserialize the array inline...
+///   #               Ok(T)
+///               }
+///               // ...
+///   #           _ => Err(ParsingError::Message("test message".to_string()))
+///           }
+///       }
+///   }
+///   ```
+///
 pub struct Frame<'de, 'deser> {
     inner: &'deser mut Deserializer<'de>,
     within_object_link: bool,
@@ -956,9 +1033,9 @@ impl<'de, 'deser> DerefMut for Frame<'de, 'deser> {
 
 impl<'de, 'deser> Frame<'de, 'deser> {
     /// Reads the next element from the input data.
-    pub fn next_element(&mut self) -> Result<RubyType<'de>> {
-        let ret = self.inner.next_element()?;
-        if let RubyType::ObjectLink(link) = ret {
+    pub fn next_element<'a>(&'a mut self) -> Result<RubyType<'de, 'a>> {
+        let ret = self.inner.next_raw_element()?;
+        if let RawRubyType::ObjectLink(link) = ret {
             if self.within_object_link {
                 return Err(ParsingError::DoubleObjectLink);
             }
@@ -966,7 +1043,7 @@ impl<'de, 'deser> Frame<'de, 'deser> {
             self.within_object_link = true;
             self.next_element()
         } else {
-            Ok(ret)
+            Ok(RubyType::from_raw(ret, self.inner))
         }
     }
 }
@@ -1005,11 +1082,9 @@ impl<'de, 'deser> Drop for Frame<'de, 'deser> {
 ///
 /// impl<'de> FromRubyMarshal<'de> for StringOrOtherIvar {
 ///     fn deserialize(deserializer: &mut Deserializer<'de>) -> Result<Self> {
-///         let mut deserializer = deserializer.prepare()?;
-///
 ///         // Strings on Ruby are instance variables too, so we gotta
 ///         // first test if deserializing a `String` succeeds.
-///         if deserializer.peek_type()? == RubyTypeTag::InstanceVariable {
+///         if deserializer.peek_type_across_link()? == RubyTypeTag::InstanceVariable {
 ///             {
 ///                 // To test this safely, we can create a checkpoint here...
 ///                 let mut checkpoint = deserializer.checkpoint();
@@ -1032,7 +1107,7 @@ impl<'de, 'deser> Drop for Frame<'de, 'deser> {
 ///             // ...we didn't ask the checkpoint to commit on the failure case,
 ///             // so by the time we get here, it has rolled back the deserializer
 ///             // to where we were before. Now we can try the other variant:
-///             return Ok(Self::Ivar(InstanceVariable::deserialize(&mut deserializer)?))
+///             return Ok(Self::Ivar(InstanceVariable::deserialize(deserializer)?))
 ///         } else {
 ///             return Err(ParsingError::Message("expected ivar".to_string()));
 ///         }
@@ -1110,7 +1185,7 @@ impl<'de, 'deser> Drop for Checkpoint<'de, 'deser> {
 
 /// A Ruby type extracted from the marshalled data.
 #[non_exhaustive]
-pub enum RubyType<'de> {
+pub enum RubyType<'de, 'deser> {
     /// An instance of `nil`.
     Null,
 
@@ -1131,11 +1206,7 @@ pub enum RubyType<'de> {
     /// A Ruby array.
     ///
     /// Use the underlying [`RubyArrayIter`] to access its elements.
-    ///
-    /// **IMPORTANT: You must either fully consume or skip the array before dropping
-    /// the provided [`RubyArrayIter`]; the deserializer does not track how far into
-    /// the array it has has advanced.**
-    Array(RubyArrayIter),
+    Array(RubyArrayIter<'de, 'deser>),
 
     /// A Ruby hash.
     ///
@@ -1144,7 +1215,7 @@ pub enum RubyType<'de> {
     /// **IMPORTANT: You must either fully consume or skip the map before dropping
     /// the provided [`RubyMapIter`]; the deserializer does not track how far into
     /// the map it has has advanced.**
-    Hash(RubyMapIter),
+    Hash(RubyMapIter<'de, 'deser>),
 
     /// A Ruby symbol (as in `:foo`).
     Symbol(&'de str),
@@ -1160,7 +1231,7 @@ pub enum RubyType<'de> {
     /// **IMPORTANT: You must either fully consume or skip the IVAR before dropping
     /// the provided [`RubyIvar`]; the deserializer does not track how far into
     /// the map it has has advanced.**
-    InstanceVariable(RubyIvar),
+    InstanceVariable(RubyIvar<'de, 'deser>),
 
     /// A raw Ruby regular expression.
     ///
@@ -1181,7 +1252,7 @@ pub enum RubyType<'de> {
     /// **IMPORTANT: You must either fully consume or skip the object before dropping
     /// the provided [`RubyObject`]; the deserializer does not track how far into
     /// the object's properties map it has has advanced.**
-    Object(RubyObject<'de>),
+    Object(RubyObject<'de, 'deser>),
 
     /// A reference to a previously-parsed Ruby object.
     ///
@@ -1189,7 +1260,122 @@ pub enum RubyType<'de> {
     /// in the input data and sets itself up to parse the underlying objects transparently.
     ///
     /// In most cases you should not hit this; if you do, you either forgot to insert a
-    /// `let mut deserializer = deserializer.prepare()?;` line before retrieving an element,
+    /// `let mut deserializer = deserializer.create_frame()?;` line before retrieving an element,
+    /// or the deserializer has a bug.
+    ObjectLink(usize),
+
+    /// User-defined marshalling data from a Ruby class with a `_dump` method.
+    UserDef(RubyUserDef<'de>),
+}
+
+impl<'de, 'deser> RubyType<'de, 'deser> {
+    pub fn from_raw(raw: RawRubyType<'de>, deserializer: &'deser mut Deserializer<'de>) -> Self {
+        match raw {
+            RawRubyType::Null => RubyType::Null,
+            RawRubyType::True => RubyType::True,
+            RawRubyType::False => RubyType::False,
+            RawRubyType::Integer(x) => RubyType::Integer(x),
+            RawRubyType::Float(x) => RubyType::Float(x),
+            RawRubyType::Array(x) => RubyType::Array(RubyArrayIter::from_raw(x, deserializer)),
+            RawRubyType::Hash(x) => RubyType::Hash(RubyMapIter::from_raw(x, deserializer)),
+            RawRubyType::Symbol(x) => RubyType::Symbol(x),
+            RawRubyType::ByteArray(x) => RubyType::ByteArray(x),
+            RawRubyType::InstanceVariable(x) => {
+                RubyType::InstanceVariable(RubyIvar::from_raw(x, deserializer))
+            }
+            RawRubyType::RawRegexp(x) => RubyType::RawRegexp(x),
+            RawRubyType::ClassRef(x) => RubyType::ClassRef(x),
+            RawRubyType::ModuleRef(x) => RubyType::ModuleRef(x),
+            RawRubyType::Object(x) => RubyType::Object(RubyObject::from_raw(x, deserializer)),
+            RawRubyType::ObjectLink(x) => RubyType::ObjectLink(x),
+            RawRubyType::UserDef(x) => RubyType::UserDef(x),
+        }
+    }
+}
+
+/// A Ruby type extracted from the marshalled data (without built-in deserializer).
+#[non_exhaustive]
+#[derive(Clone)]
+pub enum RawRubyType<'de> {
+    /// An instance of `nil`.
+    Null,
+
+    /// An instance of `true`.
+    True,
+
+    /// An instance of `false`.
+    False,
+
+    /// A Ruby integer.
+    ///
+    /// This is guaranteed to be within the [-2<sup>30</sup>, 2<sup>30</sup> - 1] range.
+    Integer(i32),
+
+    /// A Ruby floating-point number.
+    Float(f64),
+
+    /// A Ruby array.
+    ///
+    /// Use the underlying [`RawRubyArrayIter`] to access its elements.
+    ///
+    /// **IMPORTANT: You must either fully consume or skip the array before dropping
+    /// the provided [`RawRubyArrayIter`]; the deserializer does not track how far into
+    /// the array it has has advanced.**
+    Array(RawRubyArrayIter),
+
+    /// A Ruby hash.
+    ///
+    /// Use the underlying [`RawRubyMapIter`] to access its elements.
+    ///
+    /// **IMPORTANT: You must either fully consume or skip the map before dropping
+    /// the provided [`RawRubyMapIter`]; the deserializer does not track how far into
+    /// the map it has has advanced.**
+    Hash(RawRubyMapIter),
+
+    /// A Ruby symbol (as in `:foo`).
+    Symbol(&'de str),
+
+    /// A Ruby byte array.
+    ByteArray(&'de [u8]),
+
+    /// A Ruby IVAR (instance variable) object.
+    ///
+    /// Use the underlying [`RubyIvar`] to access the inner data and attached metadata
+    /// fields.
+    ///
+    /// **IMPORTANT: You must either fully consume or skip the IVAR before dropping
+    /// the provided [`RubyIvar`]; the deserializer does not track how far into
+    /// the map it has has advanced.**
+    InstanceVariable(RawRubyIvar),
+
+    /// A raw Ruby regular expression.
+    ///
+    /// Similar to [`RubyType::ByteArray`], but also contains the regular expression's flags.
+    RawRegexp(RubyRegexp<'de>),
+
+    /// A reference to an external class.
+    ClassRef(&'de str),
+
+    /// A reference to an external module.
+    ModuleRef(&'de str),
+
+    /// A Ruby object instance.
+    ///
+    /// Use the underlying [`RubyObject`] and its [`RubyMapIter`] to access the class name
+    /// and properties of the instance.
+    ///
+    /// **IMPORTANT: You must either fully consume or skip the object before dropping
+    /// the provided [`RubyObject`]; the deserializer does not track how far into
+    /// the object's properties map it has has advanced.**
+    Object(RawRubyObject<'de>),
+
+    /// A reference to a previously-parsed Ruby object.
+    ///
+    /// The deserializer internally tracks which object links correspond to what positions
+    /// in the input data and sets itself up to parse the underlying objects transparently.
+    ///
+    /// In most cases you should not hit this; if you do, you either forgot to insert a
+    /// `let mut deserializer = deserializer.create_frame()?;` line before retrieving an element,
     /// or the deserializer has a bug.
     ObjectLink(usize),
 
@@ -1263,7 +1449,7 @@ pub enum RubyTypeTag {
     /// in the input data and sets itself up to parse the underlying objects transparently.
     ///
     /// In most cases you should not hit this; if you do, you either forgot to insert a
-    /// `let mut deserializer = deserializer.prepare()?;` line before retrieving an element,
+    /// `let mut deserializer = deserializer.create_frame()?;` line before retrieving an element,
     /// or the deserializer has a bug.
     ObjectLink,
 
@@ -1271,29 +1457,30 @@ pub enum RubyTypeTag {
     UserDef,
 }
 
-/// A lending iterator over the elements of a Ruby array.
+/// A lending iterator over the elements of a Ruby array (raw API)
 ///
 /// **IMPORTANT: You must either fully consume or skip this iterator before dropping it;
 /// the deserializer does not track how far into the array it has has advanced.**
-pub struct RubyArrayIter {
+#[derive(Clone)]
+pub struct RawRubyArrayIter {
     length: usize,
     current_index: usize,
 }
 
-impl RubyArrayIter {
-    /// Consumes and returns the next element as a [`RubyType`].
+impl RawRubyArrayIter {
+    /// Consumes and returns the next element as a [`RawRubyType`].
     ///
     /// Returns `Some(element)` if an element was deserialized, or `None` if the
     /// iterator has been fully exhausted.
     pub fn next<'de>(
         &mut self,
         deserializer: &mut Deserializer<'de>,
-    ) -> Result<Option<RubyType<'de>>> {
+    ) -> Result<Option<RawRubyType<'de>>> {
         if self.current_index >= self.length {
             return Ok(None);
         }
 
-        let next = deserializer.next_element()?;
+        let next = deserializer.next_raw_element()?;
         self.current_index += 1;
         Ok(Some(next))
     }
@@ -1319,6 +1506,10 @@ impl RubyArrayIter {
     ///
     /// This can be more efficent than calling [`RubyArrayIter::next()`]/[`RubyArrayIter::next_of_type()`].
     pub fn skip(mut self, deserializer: &mut Deserializer) -> Result<()> {
+        self.skip_impl(deserializer)
+    }
+
+    pub(crate) fn skip_impl(&mut self, deserializer: &mut Deserializer) -> Result<()> {
         if self.current_index >= self.length {
             return Ok(());
         }
@@ -1337,16 +1528,69 @@ impl RubyArrayIter {
     }
 }
 
-/// A lending iterator over the elements of a Ruby hash.
+/// A lending iterator over the elements of a Ruby array.
 ///
 /// **IMPORTANT: You must either fully consume or skip this iterator before dropping it;
 /// the deserializer does not track how far into the array it has has advanced.**
-pub struct RubyMapIter {
+pub struct RubyArrayIter<'de: 'deser, 'deser> {
+    inner: RawRubyArrayIter,
+    deserializer: &'deser mut Deserializer<'de>,
+}
+
+impl<'de: 'deser, 'deser> RubyArrayIter<'de, 'deser> {
+    pub fn from_raw(raw: RawRubyArrayIter, deserializer: &'deser mut Deserializer<'de>) -> Self {
+        Self {
+            inner: raw,
+            deserializer,
+        }
+    }
+
+    /// Consumes and returns the next element as a [`RubyType`].
+    ///
+    /// Returns `Some(element)` if an element was deserialized, or `None` if the
+    /// iterator has been fully exhausted.
+    pub fn next<'deser_new>(&'deser_new mut self) -> Result<Option<RubyType<'de, 'deser_new>>> {
+        if self.inner.current_index >= self.inner.length {
+            return Ok(None);
+        }
+
+        let next = self.deserializer.next_raw_element()?;
+        self.inner.current_index += 1;
+        Ok(Some(RubyType::from_raw(next, self.deserializer)))
+    }
+
+    /// Consumes and returns the next element as a `T` implementing [`FromRubyMarshal`].
+    ///
+    /// Returns `Some(data)` if an element was deserialized, or `None` if the
+    /// iterator has been fully exhausted.
+    pub fn next_of_type<T: FromRubyMarshal<'de>>(&mut self) -> Result<Option<T>> {
+        self.inner.next_of_type(self.deserializer)
+    }
+
+    /// Skips the remaining elements of the array.
+    ///
+    /// This can be more efficent than calling [`RubyArrayIter::next()`]/[`RubyArrayIter::next_of_type()`].
+    pub fn skip(mut self) -> Result<()> {
+        self.inner.skip_impl(self.deserializer)
+    }
+
+    /// Returns the total size of the array.
+    pub fn size_hint(&self) -> usize {
+        self.inner.size_hint()
+    }
+}
+
+/// A lending iterator over the elements of a Ruby hash (raw API).
+///
+/// **IMPORTANT: You must either fully consume or skip this iterator before dropping it;
+/// the deserializer does not track how far into the map it has has advanced.**
+#[derive(Clone)]
+pub struct RawRubyMapIter {
     num_pairs: usize,
     current_index: usize,
 }
 
-impl RubyMapIter {
+impl RawRubyMapIter {
     /// **DO NOT USE:** this method is misleading and cannot be fixed, and it will be removed
     /// on the next minor release. Use [`RubyMapIter::next_element`] instead, ensuring
     /// you fully consume or skip the returned [`RubyType`] before retrieving the next one.
@@ -1364,13 +1608,13 @@ impl RubyMapIter {
     pub fn next<'de>(
         &mut self,
         deserializer: &mut Deserializer<'de>,
-    ) -> Result<Option<(RubyType<'de>, RubyType<'de>)>> {
+    ) -> Result<Option<(RawRubyType<'de>, RawRubyType<'de>)>> {
         if self.current_index >= self.num_elements() {
             return Ok(None);
         }
 
-        let a = deserializer.next_element()?;
-        let b = deserializer.next_element()?;
+        let a = deserializer.next_raw_element()?;
+        let b = deserializer.next_raw_element()?;
         self.current_index += 2;
         Ok(Some((a, b)))
     }
@@ -1410,17 +1654,17 @@ impl RubyMapIter {
     pub fn next_element<'de>(
         &mut self,
         deserializer: &mut Deserializer<'de>,
-    ) -> Result<Option<RubyType<'de>>> {
+    ) -> Result<Option<RawRubyType<'de>>> {
         if self.current_index >= self.num_elements() {
             return Ok(None);
         }
 
-        let next = deserializer.next_element()?;
+        let next = deserializer.next_raw_element()?;
         self.current_index += 1;
         Ok(Some(next))
     }
 
-    /// Consumes and returns the next element as a [`RubyType`].
+    /// Consumes and returns the next element as a [`RawRubyType`].
     ///
     /// **This does not keep track of whether the returned element is a key or a value.**
     /// Callers must ensure to call this method in pairs.
@@ -1444,16 +1688,18 @@ impl RubyMapIter {
     ///
     /// This can be more efficent than calling [`RubyArrayIter::next()`]/[`RubyArrayIter::next_of_type()`].
     pub fn skip(mut self, deserializer: &mut Deserializer) -> Result<()> {
+        self.skip_impl(deserializer)
+    }
+
+    fn skip_impl(&mut self, deserializer: &mut Deserializer) -> Result<()> {
         let num_elements = self.num_elements();
         if self.current_index >= num_elements {
             return Ok(());
         }
-
         while self.current_index < num_elements {
             deserializer.skip_element()?;
             self.current_index += 1;
         }
-
         Ok(())
     }
 
@@ -1464,6 +1710,179 @@ impl RubyMapIter {
 
     fn num_elements(&self) -> usize {
         self.num_pairs * 2
+    }
+}
+
+/// A lending iterator over the elements of a Ruby hash.
+///
+/// **IMPORTANT: You must either fully consume or skip this iterator before dropping it;
+/// the deserializer does not track how far into the map it has has advanced.**
+pub struct RubyMapIter<'de, 'deser> {
+    inner: RawRubyMapIter,
+    deserializer: &'deser mut Deserializer<'de>,
+}
+
+impl<'de, 'deser> RubyMapIter<'de, 'deser> {
+    pub fn from_raw(raw: RawRubyMapIter, deserializer: &'deser mut Deserializer<'de>) -> Self {
+        Self {
+            inner: raw,
+            deserializer,
+        }
+    }
+
+    /// Consumes and returns the next pair of elements as a 2-tuple of the specified types.
+    ///
+    /// **This method is provided as convenience.** If reducing code size bloat is desired,
+    /// it is advised to instead use a pair of [`RubyMapIter::next_element_of_type()`] calls.
+    ///
+    /// Returns `Some((key, value))` if a tuple was deserialized, or `None` if the
+    /// iterator has been fully exhausted.
+    pub fn next_of_type<T, U>(&mut self) -> Result<Option<(T, U)>>
+    where
+        T: FromRubyMarshal<'de>,
+        U: FromRubyMarshal<'de>,
+    {
+        if self.inner.current_index >= self.num_elements() {
+            return Ok(None);
+        }
+
+        let a = T::deserialize(self.deserializer)?;
+        let b = U::deserialize(self.deserializer)?;
+        self.inner.current_index += 2;
+        Ok(Some((a, b)))
+    }
+
+    /// Consumes and returns the next element as a `T` implementing [`FromRubyMarshal`].
+    ///
+    /// **This does not keep track of whether the returned element is a key or a value.**
+    /// Callers must ensure to call this method in pairs.
+    ///
+    /// Returns `Some(data)` if a tuple was deserialized, or `None` if the iterator has
+    /// been fully exhausted.
+    pub fn next_element<'deser_new>(
+        &'deser_new mut self,
+    ) -> Result<Option<RubyTypeGuard<'de, 'deser_new>>> {
+        if self.inner.current_index >= self.num_elements() {
+            return Ok(None);
+        }
+
+        let next = self.deserializer.next_element()?;
+        self.inner.current_index += 1;
+        Ok(Some(next))
+    }
+
+    pub fn next_raw_element(&mut self) -> Result<Option<RawRubyType>> {
+        self.inner.next_element(self.deserializer)
+    }
+
+    pub fn skip_element(&mut self) -> Result<Option<()>> {
+        if self.inner.current_index >= self.num_elements() {
+            return Ok(None);
+        }
+
+        self.deserializer.skip_element()?;
+        self.inner.current_index += 1;
+        Ok(Some(()))
+    }
+
+    /// Consumes and returns the next element as a [`RubyType`].
+    ///
+    /// **This does not keep track of whether the returned element is a key or a value.**
+    /// Callers must ensure to call this method in pairs.
+    ///
+    /// Returns `Some(data)` if a tuple was deserialized, or `None` if the iterator has
+    /// been fully exhausted.
+    pub fn next_element_of_type<T: FromRubyMarshal<'de>>(&mut self) -> Result<Option<T>> {
+        if self.inner.current_index >= self.num_elements() {
+            return Ok(None);
+        }
+
+        let next = T::deserialize(self.deserializer)?;
+        self.inner.current_index += 1;
+        Ok(Some(next))
+    }
+
+    /// Skips the remaining elements of the map.
+    ///
+    /// This can be more efficent than calling [`RubyArrayIter::next()`]/[`RubyArrayIter::next_of_type()`].
+    pub fn skip(mut self) -> Result<()> {
+        self.inner.skip_impl(self.deserializer)
+    }
+
+    /// Returns the total number of element pairs in the map.
+    pub fn size_hint_pairs(&self) -> usize {
+        self.inner.size_hint_pairs()
+    }
+
+    fn num_elements(&self) -> usize {
+        self.inner.num_elements()
+    }
+}
+
+impl<'de: 'deser, 'deser> Drop for RubyMapIter<'de, 'deser> {
+    fn drop(&mut self) {
+        self.inner.skip_impl(self.deserializer);
+    }
+}
+
+#[derive(Clone)]
+pub struct RawRubyIvar {
+    _private: PhantomData<()>,
+}
+
+impl RawRubyIvar {
+    /// Reads the underlying boxed data into a [`RubyType`].
+    ///
+    /// Consumes this `RubyIvar` and returns the read data as a [`RubyType`] and a
+    /// [`RubyMapIter`] over the instance variables.
+    pub fn read_data<'de>(
+        self,
+        deserializer: &mut Deserializer<'de>,
+    ) -> Result<(RawRubyType<'de>, RawRubyMapIter)> {
+        deserializer.add_current_position_as_blacklisted();
+        let data = deserializer.next_raw_element()?;
+        deserializer.add_current_position_as_blacklisted();
+        let map = deserializer.read_hash()?;
+        Ok((data, map))
+    }
+
+    /// Skips the underlying boxed data.
+    ///
+    /// Consumes this `RubyIvar` and returns a [`RubyMapIter`] over the instance variables.
+    pub fn skip_data(self, deserializer: &mut Deserializer) -> Result<RawRubyMapIter> {
+        deserializer.add_current_position_as_blacklisted();
+        deserializer.skip_element()?;
+        deserializer.add_current_position_as_blacklisted();
+        let map = deserializer.read_hash()?;
+        Ok(map)
+    }
+
+    /// Reads the underlying boxed data into a `T` implementing [`FromRubyMarshal`].
+    ///
+    /// Consumes this `RubyIvar` and returns the read data as a instance of `T` and a
+    /// [`RubyMapIter`] over the instance variables.
+    pub fn read_data_of_type<'de, T: FromRubyMarshal<'de>>(
+        self,
+        deserializer: &mut Deserializer<'de>,
+    ) -> Result<(T, RawRubyMapIter)> {
+        deserializer.add_current_position_as_blacklisted();
+        let data = T::deserialize(deserializer)?;
+        deserializer.add_current_position_as_blacklisted();
+        let map = deserializer.read_hash()?;
+        Ok((data, map))
+    }
+
+    /// Skips the entire IVAR object, including instance variables.
+    pub fn skip(self, deserializer: &mut Deserializer) -> Result<()> {
+        Self::skip_impl(deserializer)
+    }
+
+    fn skip_impl(deserializer: &mut Deserializer) -> Result<()> {
+        deserializer.add_current_position_as_blacklisted();
+        deserializer.skip_element()?;
+        deserializer.add_current_position_as_blacklisted();
+        let map = deserializer.read_hash()?;
+        map.skip(deserializer)
     }
 }
 
@@ -1503,68 +1922,89 @@ impl RubyMapIter {
 ///
 /// It is to be noted, though, that the handling of the [`RubyMapIter`] is independent:
 /// one may choose to read the boxed data and skip the instance variables, for example.
-pub struct RubyIvar {
-    _private: PhantomData<()>,
+pub struct RubyIvar<'de: 'deser, 'deser> {
+    inner: RawRubyIvar,
+    deserializer: &'deser mut Deserializer<'de>,
 }
 
-impl RubyIvar {
-    /// **DO NOT USE:** this function is misleading and may fail or produce
-    /// incorrect results if the IVAR data turns out to have a container type.
-    /// Alternatives are currently being considered.
-    ///
-    /// Reads the underlying boxed data into a [`RubyType`].
-    ///
-    /// Consumes this `RubyIvar` and returns the read data as a [`RubyType`] and a
-    /// [`RubyMapIter`] over the instance variables.
-    #[deprecated(
-        since = "0.1.1",
-        note = "This function is misleading and may fail or produce incorrect results
-    if the IVAR data turns out to have a container type. Alternatives are currently being considered."
-    )]
-    pub fn read_data<'de>(
-        self,
-        deserializer: &mut Deserializer<'de>,
-    ) -> Result<(RubyType<'de>, RubyMapIter)> {
-        deserializer.add_current_position_as_blacklisted();
-        let data = deserializer.next_element()?;
-        deserializer.add_current_position_as_blacklisted();
-        let map = deserializer.read_hash()?;
-        Ok((data, map))
+/// A [`RubyIvar`] with no destructor.
+///
+/// Used internally to "defuse" [`RubyIvar`]'s `Drop` implementation.
+struct RubyIvarFields<'de: 'deser, 'deser> {
+    _inner: RawRubyIvar,
+    deserializer: &'deser mut Deserializer<'de>,
+}
+
+impl<'de: 'deser, 'deser> RubyIvar<'de, 'deser> {
+    pub fn from_raw(raw: RawRubyIvar, deserializer: &'deser mut Deserializer<'de>) -> Self {
+        Self {
+            inner: raw,
+            deserializer,
+        }
+    }
+
+    unsafe fn defuse_drop(self) -> RubyIvarFields<'de, 'deser> {
+        use std::{mem::MaybeUninit, ptr};
+
+        // We are going to uninitialize the value.
+        let x = MaybeUninit::new(self);
+
+        // Deliberately shadow the value so we can't even try to drop it.
+        let x = x.as_ptr();
+
+        // SAFETY: All fields are read; therefore no memory is leaked.
+        let inner = ptr::read(&(*x).inner);
+        let deserializer = ptr::read(&(*x).deserializer);
+
+        RubyIvarFields {
+            _inner: inner,
+            deserializer,
+        }
     }
 
     /// Skips the underlying boxed data.
     ///
     /// Consumes this `RubyIvar` and returns a [`RubyMapIter`] over the instance variables.
-    pub fn skip_data(self, deserializer: &mut Deserializer) -> Result<RubyMapIter> {
-        deserializer.add_current_position_as_blacklisted();
-        deserializer.skip_element()?;
-        deserializer.add_current_position_as_blacklisted();
-        let map = deserializer.read_hash()?;
-        Ok(map)
+    pub fn skip_data(self) -> Result<RubyMapIter<'de, 'deser>> {
+        self.deserializer.add_current_position_as_blacklisted();
+        self.deserializer.skip_element()?;
+        self.deserializer.add_current_position_as_blacklisted();
+        let map = self.deserializer.read_hash()?;
+
+        // SAFETY: we have read everything successfully, therefore it is safe
+        // to skip the destructor
+        let RubyIvarFields {
+            _inner: _,
+            deserializer,
+        } = unsafe { self.defuse_drop() };
+        Ok(RubyMapIter::from_raw(map, deserializer))
     }
 
     /// Reads the underlying boxed data into a `T` implementing [`FromRubyMarshal`].
     ///
     /// Consumes this `RubyIvar` and returns the read data as a instance of `T` and a
     /// [`RubyMapIter`] over the instance variables.
-    pub fn read_data_of_type<'de, T: FromRubyMarshal<'de>>(
+    pub fn read_data_of_type<T: FromRubyMarshal<'de>>(
         self,
-        deserializer: &mut Deserializer<'de>,
-    ) -> Result<(T, RubyMapIter)> {
-        deserializer.add_current_position_as_blacklisted();
-        let data = T::deserialize(deserializer)?;
-        deserializer.add_current_position_as_blacklisted();
-        let map = deserializer.read_hash()?;
-        Ok((data, map))
+    ) -> Result<(T, RubyMapIter<'de, 'deser>)> {
+        self.deserializer.add_current_position_as_blacklisted();
+        let data = T::deserialize(self.deserializer)?;
+        self.deserializer.add_current_position_as_blacklisted();
+        let map = self.deserializer.read_hash()?;
+        let RubyIvarFields {
+            _inner: _,
+            deserializer,
+        } = unsafe { self.defuse_drop() };
+        Ok((data, RubyMapIter::from_raw(map, deserializer)))
     }
 
     /// Skips the entire IVAR object, including instance variables.
-    pub fn skip(self, deserializer: &mut Deserializer) -> Result<()> {
-        let map = self.skip_data(deserializer)?;
-        map.skip(deserializer)
+    pub fn skip(self) -> Result<()> {
+        RawRubyIvar::skip_impl(self.deserializer)
     }
 }
 
+#[derive(Clone)]
 /// A raw Ruby regular expression.
 ///
 /// Similar to [`RubyType::ByteArray`], but also contains the regular expression's flags.
@@ -1592,12 +2032,22 @@ pub struct RubyRegexp<'de> {
 
 impl<'de> FromRubyMarshal<'de> for RubyRegexp<'de> {
     fn deserialize(deserializer: &mut Deserializer<'de>) -> Result<Self> {
-        let mut deserializer = deserializer.prepare()?;
-
-        match deserializer.next_element()? {
+        match deserializer.next_element()?.get() {
             RubyType::RawRegexp(regexp) => Ok(regexp),
             _ => Err(ParsingError::Message("expected raw regexp".to_string())),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct RawRubyObject<'de> {
+    class_name: &'de str,
+    fields: RawRubyMapIter,
+}
+
+impl<'de> RawRubyObject<'de> {
+    pub fn skip(self, deserializer: &mut Deserializer) -> Result<()> {
+        self.fields.skip(deserializer)
     }
 }
 
@@ -1611,21 +2061,29 @@ impl<'de> FromRubyMarshal<'de> for RubyRegexp<'de> {
 /// To handle a `RubyObject`, either **fully consume or skip** the provided
 /// [`RubyMapIter#fields`]. If skipping is desired, you may use the convenience
 /// method [`RubyMapIter::skip()`].
-pub struct RubyObject<'de> {
+pub struct RubyObject<'de: 'deser, 'deser> {
     /// The name of the class from which this object was instanced.
     pub class_name: &'de str,
 
     /// A lending iterator over the object's properties.
-    pub fields: RubyMapIter,
+    pub fields: RubyMapIter<'de, 'deser>,
 }
 
-impl<'de> RubyObject<'de> {
+impl<'de: 'deser, 'deser> RubyObject<'de, 'deser> {
+    pub fn from_raw(raw: RawRubyObject<'de>, deserializer: &'deser mut Deserializer<'de>) -> Self {
+        Self {
+            class_name: raw.class_name,
+            fields: RubyMapIter::from_raw(raw.fields, deserializer),
+        }
+    }
+
     /// Convenience method for `self.fields.skip`.
-    pub fn skip(self, deserializer: &mut Deserializer) -> Result<()> {
-        self.fields.skip(deserializer)
+    pub fn skip(self) -> Result<()> {
+        self.fields.skip()
     }
 }
 
+#[derive(Clone)]
 /// User-defined marshalling data from a Ruby class with a `_dump` method.
 pub struct RubyUserDef<'de> {
     /// The name of the class from which this object was instanced.
